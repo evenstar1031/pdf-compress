@@ -1,0 +1,15 @@
+{
+  "name": "PDF 압축",
+  "short_name": "PDF 압축",
+  "description": "기기 안에서 바로 PDF를 압축합니다. 업로드 없음, 용량 제한 없음, 여러 파일 한 번에.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f1e7",
+  "theme_color": "#1f4d45",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
