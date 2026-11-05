@@ -1,5 +1,7 @@
 # PDF 압축
 
+> 스캔 PDF를 검색되게 만들기(OCR + Claude 검사 + 자동 압축)는 [`/ocr/`](https://evenstar1031.github.io/pdf-compress/ocr/) 페이지에서 해요. 처리는 비공개 저장소 `pdf-ocr-verify`의 GitHub Actions가 맡아요.
+
 iLovePDF의 "PDF 압축"과 같은 일을 하는 도구예요. 엔진도 같은 계열(Ghostscript)이라 결과도 비슷하게 나와요.
 
 - **업로드 없음** — 압축이 내 기기 안에서 일어나요. 서버로 파일이 안 나가요.

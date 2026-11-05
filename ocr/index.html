@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF 글자 찾기</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow working column — connect, send, watch, collect — like a scanner's job sheet. */
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --ink: #17201c;
+  --muted: #5d6a63;
+  --line: #d9dfdb;
+  --accent: #0f6b52;        /* scanner-lamp green */
+  --accent-ink: #ffffff;
+  --accent-soft: #e3f1ec;
+  --mark: #fff1a8;          /* highlighter for found text */
+  --ok: #1a7f37; --warn: #9a6700; --bad: #c4312a;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --surface: #19201d; --ink: #e6ece8; --muted: #9aa8a0; --line: #2c3631;
+    --accent: #3fbf95; --accent-ink: #0b1411; --accent-soft: #17302a; --mark: #5a4e12;
+    --ok: #4ac26b; --warn: #d29922; --bad: #f0645b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111614; --surface: #19201d; --ink: #e6ece8; --muted: #9aa8a0; --line: #2c3631;
+  --accent: #3fbf95; --accent-ink: #0b1411; --accent-soft: #17302a; --mark: #5a4e12;
+  --ok: #4ac26b; --warn: #d29922; --bad: #f0645b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 720px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: grid; gap: 4px; }
+h1 { font-size: 26px; line-height: 1.25; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 mark { background: linear-gradient(transparent 55%, var(--mark) 55%); color: inherit; padding: 0 2px; }
+.lede { margin: 0; color: var(--muted); max-width: 60ch; }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; min-width: 0; }
+h2 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; }
+h2 .step { font: 500 12px var(--font-mono); color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 7px; }
+p { margin: 0; }
+.muted { color: var(--muted); font-size: 13.5px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row > * { min-width: 0; }
+label { font-weight: 500; }
+input[type=text], input[type=password], input[type=url], select {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 11px; width: 100%;
+}
+input:focus-visible, select:focus-visible, button:focus-visible, .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  font: 600 14px var(--font-body); border-radius: 8px; padding: 9px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 500; }
+button.danger { color: var(--bad); }
+ol.howto { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+ol.howto code, .mono { font-family: var(--font-mono); font-size: 13px; }
+code { background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; }
+.drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 22px 16px; text-align: center;
+  cursor: pointer; background: var(--bg); display: grid; gap: 4px; place-items: center;
+}
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { font-size: 15px; }
+.files { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.files li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.files .name { overflow-wrap: anywhere; min-width: 0; }
+.size { font: 13px var(--font-mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 6px; }
+.tabs button[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.status { display: grid; gap: 8px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.steps li { display: flex; gap: 8px; align-items: baseline; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; transform: translateY(-1px); }
+.dot.run { background: var(--warn); animation: pulse 1.2s infinite; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.skip { background: transparent; border: 1px solid var(--line); }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dot.run { animation: none; } .bar > i { transition: none; } }
+.pill { font: 500 12px var(--font-body); border-radius: 999px; padding: 1px 8px; white-space: nowrap; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); } .pill.run { color: var(--warn); } .pill.wait { color: var(--muted); }
+.results { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.result { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.result .title { font-weight: 600; overflow-wrap: anywhere; }
+.result .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.runs li { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.runs a { color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
+.msg { border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.msg.err { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--ink); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); }
+.msg.info { background: var(--accent-soft); }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+a { color: var(--accent); }
+footer { color: var(--muted); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>스캔 PDF를 <mark>검색되는</mark> PDF로</h1>
+    <p class="lede">PDF를 고르면 OCR로 글자를 읽고, Claude가 원본 이미지와 한 줄씩 대조해 검사한 뒤 용량까지 줄여 드려요. 처리는 GitHub Actions에서 돌아가니 창을 닫아도 계속돼요.</p>
+  </header>
+
+  <!-- 1. connect -->
+  <section id="connect" aria-labelledby="connect-h">
+    <h2 id="connect-h"><span class="step">1</span> GitHub 연결</h2>
+    <div id="connected" hidden>
+      <div class="row" style="justify-content:space-between">
+        <p>연결됨: <span class="mono" id="repo-label"></span></p>
+        <button class="link" id="disconnect" type="button">연결 해제</button>
+      </div>
+    </div>
+    <form id="token-form" class="status">
+      <p class="muted">처음 한 번만 하면 돼요. 이 사이트가 pdf-ocr-verify 저장소에 파일을 올리고 작업을 시작할 수 있게 열쇠(토큰)를 만들어 넣어요. 토큰은 이 기기 브라우저에만 저장돼요.</p>
+      <ol class="howto">
+        <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 만들기 페이지</a> 열기 (Fine-grained token)</li>
+        <li>Token name: <code>pdf-ocr-site</code>, Expiration: 원하는 기간 (최대 1년)</li>
+        <li>Repository access: <b>Only select repositories</b> → <code>pdf-ocr-verify</code></li>
+        <li>Permissions → Repository permissions: <b>Actions</b> = Read and write, <b>Contents</b> = Read and write</li>
+        <li><b>Generate token</b> → <code>github_pat_…</code> 복사해서 아래에 붙여넣기</li>
+      </ol>
+      <label for="token">토큰</label>
+      <input type="password" id="token" autocomplete="off" placeholder="github_pat_..." required>
+      <label for="repo">저장소</label>
+      <input type="text" id="repo" value="evenstar1031/pdf-ocr-verify" autocomplete="off" spellcheck="false">
+      <div class="row"><button class="primary" type="submit" id="save-token">연결</button></div>
+      <div id="token-msg" class="msg err" hidden></div>
+    </form>
+  </section>
+
+  <!-- 2. send -->
+  <section id="send" aria-labelledby="send-h">
+    <h2 id="send-h"><span class="step">2</span> PDF 보내기</h2>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-file" aria-selected="true" aria-controls="pane-file">파일 고르기</button>
+      <button type="button" role="tab" id="tab-link" aria-selected="false" aria-controls="pane-link">Google Drive 링크</button>
+    </div>
+    <div id="pane-file" role="tabpanel" aria-labelledby="tab-file" class="status">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="PDF 고르기">
+        <strong>PDF를 여기에 끌어다 놓거나 눌러서 고르기</strong>
+        <span class="muted">여러 개 가능 · 크기 제한 없음 (큰 파일은 20MB씩 나눠 올려요)</span>
+      </div>
+      <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+      <ul class="files" id="file-list"></ul>
+    </div>
+    <div id="pane-link" role="tabpanel" aria-labelledby="tab-link" class="status" hidden>
+      <label for="url">공유 링크 (파일 또는 폴더)</label>
+      <input type="url" id="url" placeholder="https://drive.google.com/file/d/..." spellcheck="false">
+      <p class="muted">Drive에서 공유 → 일반 액세스를 <b>링크가 있는 모든 사용자</b>로 바꾼 뒤 링크를 복사하세요.</p>
+    </div>
+    <div class="row">
+      <label for="level">압축</label>
+      <select id="level" style="width:auto">
+        <option value="recommended" selected>권장 · 이미지 150dpi</option>
+        <option value="low">약하게 · 300dpi (인쇄용)</option>
+        <option value="extreme">강하게 · 72dpi (가장 작게)</option>
+        <option value="off">압축 안 함</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="primary" type="button" id="start" disabled>검사 시작</button>
+      <span class="muted" id="start-hint">먼저 GitHub를 연결하세요.</span>
+    </div>
+    <div class="status" id="progress" hidden>
+      <div class="row" style="justify-content:space-between"><span id="progress-label">올리는 중…</span><span class="size" id="progress-num"></span></div>
+      <div class="bar"><i id="progress-bar"></i></div>
+    </div>
+    <div id="send-msg" class="msg" hidden></div>
+  </section>
+
+  <!-- 3. watch -->
+  <section id="watch" aria-labelledby="watch-h">
+    <h2 id="watch-h"><span class="step">3</span> 진행 상황</h2>
+    <div id="current" class="status" hidden>
+      <div class="row" style="justify-content:space-between">
+        <a id="current-link" href="#" target="_blank" rel="noopener" class="title"></a>
+        <span class="pill" id="current-pill"></span>
+      </div>
+      <ul class="steps" id="current-steps"></ul>
+      <p class="muted" id="current-note"></p>
+    </div>
+    <ul class="runs" id="runs"><li class="muted">연결하면 최근 작업이 여기에 보여요.</li></ul>
+  </section>
+
+  <!-- 4. results -->
+  <section id="results-sec" aria-labelledby="results-h">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="results-h"><span class="step">4</span> 결과</h2>
+      <button type="button" class="link" id="refresh">새로고침</button>
+    </div>
+    <p class="muted">PDF는 검색 가능한 최종본, 리포트는 Claude가 고친 줄과 ‘확인 필요’ 줄을 원본 이미지와 함께 보여줘요.</p>
+    <ul class="results" id="results"><li class="muted">연결하면 output 폴더의 결과가 여기에 보여요.</li></ul>
+    <div id="results-msg" class="msg err" hidden></div>
+  </section>
+
+  <footer>파일은 내 GitHub 저장소(비공개)에만 올라가요 · 원본 조각은 처리 후 자동 삭제</footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const API = "https://api.github.com";
+  const WORKFLOW = "ocr.yml";
+  const CHUNK = 20 * 1024 * 1024;          // raw bytes per blob (base64 ≈ 27MB, well under GitHub's 100MB cap)
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+  let token = store.get("pdfocr.token") || "";
+  let repo = store.get("pdfocr.repo") || "evenstar1031/pdf-ocr-verify";
+  let files = [];
+  let mode = "file";
+  let pollTimer = null;
+  let watching = null; // {request, runId}
+
+  // ------------------------------------------------------------ helpers
+  const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
+  const encPath = (p) => p.split("/").map(encodeURIComponent).join("/");
+  const show = (el, text, kind) => { el.hidden = !text; el.textContent = text || ""; if (kind) el.className = "msg " + kind; };
+
+  async function gh(path, opts = {}) {
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        Authorization: "Bearer " + token,
+        ...(opts.body && typeof opts.body === "string" ? { "Content-Type": "application/json" } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).message || ""; } catch {}
+      const hint = res.status === 401 ? "토큰이 틀렸거나 만료됐어요."
+        : res.status === 403 || res.status === 404 ? "토큰 권한을 확인하세요 (저장소 선택, Actions·Contents 읽기/쓰기)."
+        : res.status === 422 ? "GitHub가 요청을 거절했어요."
+        : "";
+      throw new Error(`${hint} (${res.status} ${detail})`.trim());
+    }
+    return res;
+  }
+  const ghJson = async (path, opts) => (await gh(path, opts)).json();
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+  async function sha256(blob) {
+    const buf = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  async function retry(fn, tries = 3) {
+    for (let i = 0; ; i++) {
+      try { return await fn(); } catch (e) { if (i >= tries - 1) throw e; await new Promise((r) => setTimeout(r, 2000 * (i + 1))); }
+    }
+  }
+
+  // ------------------------------------------------------------ connect
+  function renderConnection() {
+    const on = !!token;
+    $("connected").hidden = !on;
+    $("token-form").hidden = on;
+    $("repo-label").textContent = repo;
+    updateStart();
+  }
+  $("repo").value = repo;
+  $("token-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const t = $("token").value.trim();
+    const r = $("repo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "");
+    show($("token-msg"), "");
+    $("save-token").disabled = true;
+    const prev = token; token = t;
+    try {
+      await ghJson(`/repos/${r}`);
+      await ghJson(`/repos/${r}/actions/workflows/${WORKFLOW}`);
+      repo = r; store.set("pdfocr.token", t); store.set("pdfocr.repo", r);
+      $("token").value = "";
+      renderConnection(); loadRuns(); loadResults();
+    } catch (err) {
+      token = prev;
+      show($("token-msg"), "연결하지 못했어요. " + err.message, "err");
+    } finally { $("save-token").disabled = false; }
+  });
+  $("disconnect").addEventListener("click", () => {
+    token = ""; store.del("pdfocr.token"); renderConnection();
+  });
+
+  // ------------------------------------------------------------ pick files
+  $("tab-file").addEventListener("click", () => setMode("file"));
+  $("tab-link").addEventListener("click", () => setMode("link"));
+  function setMode(m) {
+    mode = m;
+    $("tab-file").setAttribute("aria-selected", m === "file");
+    $("tab-link").setAttribute("aria-selected", m === "link");
+    $("pane-file").hidden = m !== "file";
+    $("pane-link").hidden = m !== "link";
+    updateStart();
+  }
+  const drop = $("drop");
+  drop.addEventListener("click", () => $("file").click());
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+  $("file").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+  $("url").addEventListener("input", updateStart);
+
+  function addFiles(list) {
+    for (const f of list) {
+      if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") continue;
+      if (!files.some((x) => x.name === f.name && x.size === f.size)) files.push(f);
+    }
+    renderFiles();
+  }
+  function renderFiles() {
+    const ul = $("file-list");
+    ul.replaceChildren(...files.map((f, i) => {
+      const li = document.createElement("li");
+      const name = document.createElement("span"); name.className = "name"; name.textContent = f.name;
+      const right = document.createElement("span"); right.className = "row";
+      const size = document.createElement("span"); size.className = "size"; size.textContent = fmt(f.size);
+      const rm = document.createElement("button"); rm.type = "button"; rm.className = "link"; rm.textContent = "빼기";
+      rm.addEventListener("click", () => { files.splice(i, 1); renderFiles(); });
+      right.append(size, rm); li.append(name, right); return li;
+    }));
+    updateStart();
+  }
+  function updateStart() {
+    const ready = mode === "file" ? files.length > 0 : /^https?:\/\//.test($("url").value.trim());
+    $("start").disabled = !token || !ready || !!watching?.uploading;
+    $("start-hint").textContent = !token ? "먼저 GitHub를 연결하세요."
+      : !ready ? (mode === "file" ? "PDF를 골라 주세요." : "링크를 붙여넣어 주세요.")
+      : mode === "file" ? `${files.length}개 · ${fmt(files.reduce((a, f) => a + f.size, 0))}` : "";
+  }
+
+  // ------------------------------------------------------------ send
+  function setProgress(label, done, total) {
+    $("progress").hidden = false;
+    $("progress-label").textContent = label;
+    $("progress-num").textContent = total ? `${fmt(done)} / ${fmt(total)}` : "";
+    $("progress-bar").style.width = total ? `${Math.round((done / total) * 100)}%` : "100%";
+  }
+
+  $("start").addEventListener("click", async () => {
+    const request = `사이트 · ${mode === "file" ? (files.length === 1 ? files[0].name : files[0].name + ` 외 ${files.length - 1}개`) : "Drive 링크"} · ${Date.now().toString(36)}`;
+    const inputs = { request, compress: $("level").value };
+    show($("send-msg"), "");
+    watching = { request, uploading: true, since: Date.now() - 60_000 };
+    updateStart();
+    try {
+      if (mode === "file") {
+        inputs.inbox = await uploadInbox(files);
+      } else {
+        inputs.url = $("url").value.trim();
+      }
+      setProgress("작업 시작 요청 중…", 0, 0);
+      await gh(`/repos/${repo}/actions/workflows/${WORKFLOW}/dispatches`, {
+        method: "POST", body: JSON.stringify({ ref: "main", inputs }),
+      });
+      setProgress("요청 완료 · GitHub가 작업을 준비하고 있어요", 0, 0);
+      show($("send-msg"), "보냈어요. 아래 진행 상황에서 단계별로 볼 수 있어요. 이 창을 닫아도 처리는 계속돼요.", "info");
+      files = []; renderFiles(); $("url").value = "";
+      watching.uploading = false;
+      startPolling();
+    } catch (err) {
+      watching = null;
+      $("progress").hidden = true;
+      show($("send-msg"), "보내지 못했어요. " + err.message, "err");
+    } finally { updateStart(); }
+  });
+
+  async function uploadInbox(list) {
+    const total = list.reduce((a, f) => a + f.size, 0);
+    let done = 0;
+    const tree = [];
+    const manifest = { files: [] };
+    for (let fi = 0; fi < list.length; fi++) {
+      const f = list[fi];
+      const parts = [];
+      for (let off = 0, pi = 0; off < f.size; off += CHUNK, pi++) {
+        const piece = f.slice(off, Math.min(off + CHUNK, f.size));
+        setProgress(`올리는 중 · ${f.name} (${pi + 1}/${Math.ceil(f.size / CHUNK)})`, done, total);
+        const [b64, hash] = await Promise.all([blobToBase64(piece), sha256(piece)]);
+        const blob = await retry(() => ghJson(`/repos/${repo}/git/blobs`, {
+          method: "POST", body: JSON.stringify({ content: b64, encoding: "base64" }),
+        }));
+        const path = `f${fi}/p${String(pi).padStart(3, "0")}`;
+        tree.push({ path, mode: "100644", type: "blob", sha: blob.sha });
+        parts.push({ path, sha256: hash });
+        done += piece.size;
+        setProgress(`올리는 중 · ${f.name}`, done, total);
+      }
+      manifest.files.push({ name: f.name.normalize("NFC"), size: f.size, parts });
+    }
+    tree.push({ path: "manifest.json", mode: "100644", type: "blob", content: JSON.stringify(manifest) });
+    setProgress("올린 조각 정리 중…", total, total);
+    const t = await ghJson(`/repos/${repo}/git/trees`, { method: "POST", body: JSON.stringify({ tree }) });
+    const c = await ghJson(`/repos/${repo}/git/commits`, {
+      method: "POST", body: JSON.stringify({ message: "upload from site", tree: t.sha, parents: [] }),
+    });
+    const branch = `inbox/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    await ghJson(`/repos/${repo}/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: c.sha }) });
+    return branch;
+  }
+
+  // ------------------------------------------------------------ watch
+  const STATUS = {
+    queued: ["대기 중", "wait"], waiting: ["대기 중", "wait"], pending: ["대기 중", "wait"], requested: ["대기 중", "wait"],
+    in_progress: ["처리 중", "run"],
+  };
+  const CONC = { success: ["완료", "ok"], failure: ["실패", "bad"], cancelled: ["취소됨", "bad"], timed_out: ["시간 초과", "bad"], skipped: ["건너뜀", "wait"] };
+  const label = (r) => r.status === "completed" ? (CONC[r.conclusion] || [r.conclusion, "wait"]) : (STATUS[r.status] || [r.status, "wait"]);
+  const when = (iso) => new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  async function loadRuns() {
+    if (!token) return;
+    try {
+      const data = await ghJson(`/repos/${repo}/actions/workflows/${WORKFLOW}/runs?per_page=8`);
+      const runs = data.workflow_runs || [];
+      $("runs").replaceChildren(...(runs.length ? runs.map((r) => {
+        const li = document.createElement("li");
+        const a = document.createElement("a"); a.href = r.html_url; a.target = "_blank"; a.rel = "noopener";
+        a.textContent = `${when(r.created_at)} · ${r.display_title}`;
+        const [t, k] = label(r);
+        const pill = document.createElement("span"); pill.className = "pill " + k; pill.textContent = t;
+        li.append(a, pill); return li;
+      }) : [Object.assign(document.createElement("li"), { className: "muted", textContent: "아직 작업이 없어요." })]));
+      if (!watching) {
+        const active = runs.find((r) => r.status !== "completed");
+        if (active) { watching = { runId: active.id }; startPolling(); }
+      }
+      return runs;
+    } catch (err) {
+      $("runs").replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "작업 목록을 불러오지 못했어요. " + err.message }));
+      return [];
+    }
+  }
+
+  function startPolling() {
+    clearTimeout(pollTimer);
+    const tick = async () => {
+      const runs = await loadRuns();
+      let run = null;
+      if (watching?.runId) run = runs.find((r) => r.id === watching.runId) || await ghJson(`/repos/${repo}/actions/runs/${watching.runId}`).catch(() => null);
+      else if (watching?.request) run = runs.find((r) => r.display_title === watching.request);
+      if (run) { watching.runId = run.id; await renderCurrent(run); }
+      else if (watching?.request && Date.now() - watching.since > 4 * 60_000) {
+        $("current").hidden = false; $("current-note").textContent = "작업이 아직 보이지 않아요. 잠시 뒤 새로고침해 보세요.";
+      }
+      if (run && run.status === "completed") { watching = null; updateStart(); loadResults(); return; }
+      if (watching) pollTimer = setTimeout(tick, 8000);
+    };
+    tick();
+  }
+
+  async function renderCurrent(run) {
+    $("current").hidden = false;
+    $("current-link").href = run.html_url;
+    $("current-link").textContent = run.display_title;
+    const [t, k] = label(run);
+    $("current-pill").className = "pill " + k; $("current-pill").textContent = t;
+    try {
+      const jobs = (await ghJson(`/repos/${repo}/actions/runs/${run.id}/jobs`)).jobs || [];
+      const steps = (jobs[0]?.steps || []).filter((s) => !/^(Set up job|Complete job|Post |Run actions\/)/.test(s.name));
+      $("current-steps").replaceChildren(...steps.map((s) => {
+        const li = document.createElement("li");
+        const dot = document.createElement("span");
+        dot.className = "dot " + (s.status === "in_progress" ? "run" : s.conclusion === "success" ? "ok" : s.conclusion === "failure" ? "bad" : s.conclusion === "skipped" ? "skip" : "");
+        const name = document.createElement("span"); name.textContent = s.name;
+        li.append(dot, name); return li;
+      }));
+      const cur = steps.find((s) => s.status === "in_progress");
+      $("current-note").textContent = run.status === "completed"
+        ? (run.conclusion === "success" ? "끝났어요. 결과는 아래에 있어요." : "실패했어요. 제목을 눌러 GitHub에서 로그를 확인하세요.")
+        : cur && /OCR \+ LLM/.test(cur.name) ? "글자를 읽고 검사하는 중이에요. 쪽수가 많으면 수십 분 걸려요." : "";
+    } catch {}
+  }
+
+  // ------------------------------------------------------------ results
+  const KIND = [
+    [/\.review\.html$/i, "리포트"], [/\.md$/i, "텍스트"], [/\.txt$/i, "안내"], [/\.pdf$/i, "PDF"],
+  ];
+  async function loadResults() {
+    if (!token) return;
+    show($("results-msg"), "");
+    try {
+      const items = (await ghJson(`/repos/${repo}/contents/output?ref=main`)).filter((x) => x.type === "file" && x.name !== ".gitkeep");
+      const groups = new Map();
+      for (const it of items) {
+        const stem = it.name.replace(/(\.review\.html|\.md|\.pdf|\.너무커서-Artifacts에만있음\.txt)$/i, "");
+        if (!groups.has(stem)) groups.set(stem, []);
+        groups.get(stem).push(it);
+      }
+      const ul = $("results");
+      if (!groups.size) { ul.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "아직 결과가 없어요." })); return; }
+      ul.replaceChildren(...[...groups].map(([stem, list]) => {
+        const li = document.createElement("li"); li.className = "result";
+        const title = document.createElement("div"); title.className = "title"; title.textContent = stem;
+        const actions = document.createElement("div"); actions.className = "actions";
+        const order = (n) => KIND.findIndex(([re]) => re.test(n));
+        list.sort((a, b) => [1, 2, 3, 0][order(a.name)] - [1, 2, 3, 0][order(b.name)]);
+        for (const it of list) {
+          const kind = (KIND.find(([re]) => re.test(it.name)) || [null, "파일"])[1];
+          const b = document.createElement("button"); b.type = "button";
+          if (kind === "PDF") b.className = "primary";
+          b.textContent = kind === "리포트" ? "리포트 보기" : `${kind} 받기 · ${fmt(it.size)}`;
+          b.addEventListener("click", () => openFile(it, kind, b));
+          actions.append(b);
+        }
+        const del = document.createElement("button"); del.type = "button"; del.className = "link danger"; del.textContent = "지우기";
+        const confirmBox = document.createElement("div"); confirmBox.className = "confirm"; confirmBox.hidden = true;
+        confirmBox.innerHTML = '<span>이 결과 파일들을 저장소에서 지울까요?</span>';
+        const yes = document.createElement("button"); yes.type = "button"; yes.className = "danger"; yes.textContent = "지우기";
+        const no = document.createElement("button"); no.type = "button"; no.textContent = "취소";
+        confirmBox.append(yes, no);
+        del.addEventListener("click", () => { confirmBox.hidden = false; del.hidden = true; });
+        no.addEventListener("click", () => { confirmBox.hidden = true; del.hidden = false; });
+        yes.addEventListener("click", async () => {
+          yes.disabled = true; yes.textContent = "지우는 중…";
+          try {
+            for (const it of list) {
+              await gh(`/repos/${repo}/contents/${encPath(it.path)}`, { method: "DELETE", body: JSON.stringify({ message: `결과 삭제: ${it.name}`, sha: it.sha }) });
+            }
+            loadResults();
+          } catch (err) { show($("results-msg"), "지우지 못했어요. " + err.message, "err"); yes.disabled = false; yes.textContent = "지우기"; }
+        });
+        actions.append(del);
+        li.append(title, actions, confirmBox); return li;
+      }));
+    } catch (err) {
+      if (/404/.test(err.message)) { $("results").replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "아직 결과가 없어요." })); return; }
+      show($("results-msg"), "결과를 불러오지 못했어요. " + err.message, "err");
+    }
+  }
+
+  async function openFile(it, kind, btn) {
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = "받는 중…";
+    try {
+      const res = await gh(`/repos/${repo}/contents/${encPath(it.path)}?ref=main`, { headers: { Accept: "application/vnd.github.raw+json" } });
+      const type = kind === "리포트" ? "text/html" : kind === "PDF" ? "application/pdf" : "text/plain";
+      const blob = new Blob([await res.arrayBuffer()], { type: type + (type.startsWith("text") ? ";charset=utf-8" : "") });
+      const url = URL.createObjectURL(blob);
+      if (kind === "리포트") {
+        const w = window.open(url, "_blank");
+        if (!w) location.href = url;
+      } else {
+        const a = document.createElement("a"); a.href = url; a.download = it.name; document.body.append(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) { show($("results-msg"), `${it.name}을(를) 받지 못했어요. ` + err.message, "err"); }
+    finally { btn.disabled = false; btn.textContent = old; }
+  }
+  $("refresh").addEventListener("click", () => { loadRuns(); loadResults(); });
+
+  renderConnection();
+  if (token) { loadRuns(); loadResults(); }
+})();
+</script>
+</body>
+</html>
