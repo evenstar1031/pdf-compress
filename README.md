@@ -1,5 +1,7 @@
 # PDF 압축
 
+> PDF가 아닌 파일(한글 HWP·HWPX, 사진)도 넣으면 PDF로 바꾼 뒤 압축해요.
+>
 > 스캔 PDF를 검색되게 만들기(OCR + Claude 검사 + 자동 압축)는 [`/ocr/`](https://evenstar1031.github.io/pdf-compress/ocr/) 페이지에서 해요. 처리는 비공개 저장소 `pdf-ocr-verify`의 GitHub Actions가 맡아요.
 
 iLovePDF의 "PDF 압축"과 같은 일을 하는 도구예요. 엔진도 같은 계열(Ghostscript)이라 결과도 비슷하게 나와요.
@@ -9,6 +11,11 @@ iLovePDF의 "PDF 압축"과 같은 일을 하는 도구예요. 엔진도 같은 
 - **3단계 압축** — 강하게(72dpi) / 권장(150dpi) / 약하게(300dpi)
 - 글자는 그대로 남아서 **검색·복사가 계속 돼요.** 이미지만 줄어들어요.
 - 압축해도 거의 안 줄어드는 파일은 원본을 그대로 돌려줘요.
+- **PDF가 아닌 파일은 PDF로 바꾼 뒤 압축해요.**
+  - **한글(HWP·HWPX)**: [rhwp](https://github.com/edwardkim/rhwp)(MIT)로 쪽마다 그린 뒤 [MuPDF](https://mupdf.com/)(AGPL)로 PDF를 만들어요. 표·선·그림은 그대로, 글자는 검색·복사되는 진짜 글자로 들어가요. 글꼴은 고딕 = Noto Sans KR, 바탕 = 나눔명조(둘 다 OFL)로 바뀌어요.
+  - **사진(JPG·PNG·HEIC·WEBP·GIF·BMP·TIFF)**: 한 장이 한 쪽. 사진 비율 그대로, 긴 변을 A4 긴 변에 맞춰요. 사진의 회전 정보도 반영해요.
+  - 워드·파워포인트·엑셀은 브라우저 안에서 정확히 그릴 방법이 없어서 받지 않아요. 그 앱에서 *PDF로 내보내기* 한 뒤 넣어 주세요.
+  - 결과 이름은 `원래이름_압축.pdf` (이름 그대로 저장을 켜면 `원래이름.pdf`).
 
 | 어디서 | 무엇으로 |
 |---|---|
@@ -89,6 +96,8 @@ powershell -ExecutionPolicy Bypass -File compress-pdf.ps1 -Level extreme|recomme
 
 - **"압축 엔진을 불러오지 못했어요"** — Pages 반영 전일 수 있어요. 몇 분 뒤 새로고침. `engine/gs.wasm`이 올라갔는지 확인.
 - **암호 걸린 PDF** — 여는 암호가 있는 PDF는 압축할 수 없어요. 암호를 푼 뒤 넣어 주세요.
+- **한글 문서가 안 열림** — 암호·배포용으로 잠긴 문서는 한글에서 잠금을 푼 뒤 넣어 주세요. 옛 수식 편집기로 만든 수식은 글자가 빠질 수 있어요.
+- **한글 문서가 처음에 느림** — 한글 엔진(약 27MB)과 글꼴(필요한 것만, 최대 약 18MB)을 처음 한 번 받아요.
 - **"원본에 오류가 있어…" 경고** — 원래 PDF가 살짝 깨져 있던 경우예요. 결과를 한 번 열어서 확인해 주세요.
 - **"이미 최적화돼 있어…"** — 더 줄일 게 없는 파일이라 원본을 그대로 줘요. (글자만 있는 PDF, 이미 압축한 PDF 등)
 
@@ -98,6 +107,10 @@ powershell -ExecutionPolicy Bypass -File compress-pdf.ps1 -Level extreme|recomme
 index.html, app.js      화면
 worker.js               압축 담당 (백그라운드)
 engine/gs.js, gs.wasm   Ghostscript 10.06 WebAssembly 빌드 (@okathira/ghostpdl-wasm)
+convert/worker.js       PDF가 아닌 파일 → PDF (한글·사진). 필요할 때만 불러와요
+convert/hwp-pdf.js      HWP/HWPX → PDF (lectrue-font-swap 저장소와 같은 파일)
+convert/vendor/         MuPDF.js(AGPL), rhwp(MIT), HarfBuzz subset(MIT)
+convert/fonts/          Noto Sans KR(Regular·Bold, 한글·KS X 1001 한자·기호만 남긴 판), 나눔명조, 기호용 Noto Sans Symbols 2·Math — 모두 OFL
 manifest.webmanifest, icon-*.png   홈 화면 추가용
 windows/                윈도우용 스크립트 (.bat + PowerShell)
 ```

@@ -34,10 +34,19 @@ function fmt(bytes) {
 }
 const nfc = (s) => (s.normalize ? s.normalize('NFC') : s); // 아이패드/맥의 분리된 한글(NFD) → 윈도우에서 안 깨지게
 const isPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+// PDF가 아닌 파일은 먼저 PDF로 바꾼 뒤 압축 (한글 문서, 사진)
+const IMAGE_RE = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?|avif)$/i;
+function kindOf(f) {
+  if (isPdf(f)) return 'pdf';
+  if (/\.(hwp|hwpx)$/i.test(f.name) || /hwp|hancom/i.test(f.type)) return 'hwp';
+  if (IMAGE_RE.test(f.name) || /^image\//.test(f.type)) return 'image';
+  return null;
+}
+const KIND_LABEL = { hwp: '한글', image: '사진' };
 const presetLabel = { extreme: '강하게', recommended: '권장', low: '약하게' };
 
 function outName(item) {
-  const base = nfc(item.name).replace(/\.pdf$/i, '');
+  const base = item.kind === 'pdf' ? nfc(item.name).replace(/\.pdf$/i, '') : nfc(item.name).replace(/\.[^.]+$/, '');
   return keepName.checked ? `${base}.pdf` : `${base}_압축.pdf`;
 }
 function setStatus(text, isErr = false) {
@@ -50,24 +59,28 @@ function selectedPreset() {
 
 // ---------- 파일 추가 ----------
 function addFiles(files) {
-  let skipped = 0, added = 0;
+  let skipped = 0, office = 0, added = 0;
   for (const f of files) {
-    if (!isPdf(f)) { skipped++; continue; }
+    const kind = kindOf(f);
+    if (!kind) { if (/\.(docx?|pptx?|xlsx?|odt|odp|ods|rtf|key|pages|numbers)$/i.test(f.name)) office++; else skipped++; continue; }
     if (items.some((it) => it.file.name === f.name && it.size === f.size && it.file.lastModified === f.lastModified)) continue;
-    const item = { id: nextId++, file: f, name: nfc(f.name), size: f.size, status: 'pending', page: 0, total: 0,
-      out: null, outSize: 0, crc: 0, warn: false, error: '', preset: '', el: null };
+    const item = { id: nextId++, file: f, kind, name: nfc(f.name), size: f.size, status: 'pending', page: 0, total: 0,
+      pdf: null, pdfPages: 0, out: null, outSize: 0, crc: 0, warn: false, error: '', preset: '', el: null };
     item.el = renderRow(item);
     list.appendChild(item.el);
     items.push(item);
     added++;
   }
-  if (skipped) setStatus(`PDF가 아닌 파일 ${skipped}개는 뺐어요.`);
+  const notes = [];
+  if (office) notes.push(`워드·파워포인트·엑셀 파일 ${office}개는 브라우저에서 PDF로 바꿀 수 없어서 뺐어요. 그 앱에서 ‘PDF로 내보내기’ 한 뒤 넣어 주세요.`);
+  if (skipped) notes.push(`PDF·한글·사진이 아닌 파일 ${skipped}개는 뺐어요.`);
+  if (notes.length) setStatus(notes.join(' '));
   else if (added) setStatus('');
   if (added) warmup();
   refresh();
 }
 
-// 폴더를 끌어다 놓은 경우(컴퓨터) 안의 PDF까지 모두 찾기
+// 폴더를 끌어다 놓은 경우(컴퓨터) 안의 파일까지 모두 찾기
 async function filesFromDrop(dt) {
   const entries = [...(dt.items || [])].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
   if (!entries.length) return [...dt.files];
@@ -126,10 +139,20 @@ function updateRow(item) {
   const meta = li.querySelector('.meta');
   const acts = li.querySelector('.acts');
   const bar = li.querySelector('.track i');
-  li.querySelector('.x').hidden = item.status === 'running';
+  li.querySelector('.x').hidden = item.status === 'running' || item.status === 'converting';
 
-  let html = fmt(item.size);
-  if (item.status === 'pending') html += ' · 대기 중';
+  const isConv = item.kind !== 'pdf';
+  let html = (isConv ? `<span class="kind">${KIND_LABEL[item.kind]}</span> ` : '') + fmt(item.size);
+  if (item.status === 'pending') html += item.pdf ? ` · PDF로 바꿈(${fmt(item.pdf.size)}) · 압축 대기 중` : isConv ? ' · 대기 중 (PDF로 바꾼 뒤 압축해요)' : ' · 대기 중';
+  if (item.status === 'converting') {
+    if (item.total) {
+      html += ` · PDF로 바꾸는 중 ${item.page}/${item.total}쪽`;
+      bar.classList.remove('indet'); bar.style.width = (100 * item.page / item.total).toFixed(1) + '%';
+    } else {
+      html += item.kind === 'hwp' ? ' · PDF로 바꾸는 중… (처음 한 번은 한글 엔진을 받느라 조금 걸려요)' : ' · PDF로 바꾸는 중…';
+      bar.classList.add('indet'); bar.style.width = '';
+    }
+  }
   if (item.status === 'running') {
     if (item.total) {
       html += ` · 압축 중 ${item.page}/${item.total}쪽`;
@@ -141,10 +164,10 @@ function updateRow(item) {
   }
   if (item.status === 'done') {
     const pct = Math.round(100 * (1 - item.outSize / item.size));
-    html += ` → <b>${fmt(item.outSize)}</b> <span class="gain">−${pct}%</span> · ${presetLabel[item.preset]}`;
+    html += ` → ${isConv ? 'PDF ' : ''}<b>${fmt(item.outSize)}</b> ${pct > 0 ? `<span class="gain">−${pct}%</span>` : pct < 0 ? `(+${-pct}%)` : ''} · ${presetLabel[item.preset]}`;
     if (item.warn) html += ' · <span class="warn">원본에 오류가 있어 일부 페이지가 다르게 보일 수 있어요. 확인해 주세요.</span>';
   }
-  if (item.status === 'kept') html += ' · 이미 최적화돼 있어 더 줄일 수 없어요 (원본 그대로)';
+  if (item.status === 'kept') html += isConv ? ` → PDF <b>${fmt(item.outSize)}</b> · PDF로 바꿨어요 (이미 작아서 더 줄이지 않았어요)` : ' · 이미 최적화돼 있어 더 줄일 수 없어요 (원본 그대로)';
   if (item.status === 'error') html += ` · <span class="err">${escapeHtml(item.error)}</span>`;
   meta.innerHTML = html;
 
@@ -165,7 +188,7 @@ function updateRow(item) {
 function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 function removeItem(item) {
-  if (item.status === 'running') return;
+  if (item.status === 'running' || item.status === 'converting') return;
   items = items.filter((it) => it !== item);
   item.el.remove();
   refresh();
@@ -185,9 +208,9 @@ function refresh() {
 
   if (finished.length) {
     const before = finished.reduce((s, i) => s + i.size, 0);
-    const after = finished.reduce((s, i) => s + (i.status === 'done' ? i.outSize : i.size), 0);
+    const after = finished.reduce((s, i) => s + (i.outSize || i.size), 0);
     const pct = before ? Math.round(100 * (1 - after / before)) : 0;
-    sumText.textContent = `${finished.length}개 완료 · ${fmt(before)} → ${fmt(after)} (−${pct}%)`;
+    sumText.textContent = `${finished.length}개 완료 · ${fmt(before)} → ${fmt(after)} (${pct >= 0 ? '−' + pct : '+' + -pct}%)`;
     summary.classList.add('show');
     zipBtn.disabled = running;
     shareAllBtn.hidden = !canShareFiles;
@@ -259,9 +282,54 @@ function finishJob(slot, msg) {
   schedule();
 }
 
+// ---------- PDF로 바꾸기 (한글·사진) — 워커 하나에서 차례로 ----------
+const conv = { w: null, job: null };
+function convWorker() {
+  if (conv.w) return conv.w;
+  const w = new Worker(new URL('./convert/worker.js', import.meta.url), { type: 'module' });
+  w.onmessage = (e) => {
+    const msg = e.data;
+    const item = conv.job;
+    if (!item || item.id !== msg.id) return;
+    if (msg.type === 'progress') { item.page = msg.done; item.total = msg.total; updateRow(item); return; }
+    conv.job = null;
+    if (msg.type === 'done') {
+      item.pdf = new Blob([msg.buf], { type: 'application/pdf' });
+      item.pdfPages = msg.pages;
+      item.status = 'pending';
+    } else {
+      item.status = 'error';
+      item.error = msg.message || 'PDF로 바꾸지 못했어요';
+    }
+    updateRow(item);
+    schedule();
+  };
+  w.onerror = (e) => {
+    e.preventDefault();
+    const item = conv.job;
+    conv.job = null;
+    try { w.terminate(); } catch { /* */ }
+    conv.w = null;
+    if (item) { item.status = 'error'; item.error = 'PDF로 바꾸는 엔진이 멈췄어요. 메모리가 부족했을 수 있어요.'; updateRow(item); }
+    schedule();
+  };
+  conv.w = w;
+  return w;
+}
+function startConvert(item) {
+  item.status = 'converting'; item.page = 0; item.total = 0;
+  conv.job = item;
+  updateRow(item);
+  convWorker().postMessage({ type: 'convert', id: item.id, file: item.file, kind: item.kind });
+}
+
 function schedule() {
   if (!running) return;
-  const queue = items.filter((i) => i.status === 'pending');
+  if (!conv.job) {
+    const next = items.find((i) => i.status === 'pending' && i.kind !== 'pdf' && !i.pdf);
+    if (next) startConvert(next);
+  }
+  const queue = items.filter((i) => i.status === 'pending' && (i.kind === 'pdf' || i.pdf));
   while (queue.length) {
     let slot = pool.find((s) => !s.job);
     if (!slot && pool.length < MAX_WORKERS) {
@@ -272,11 +340,11 @@ function schedule() {
     item.status = 'running'; item.page = 0; item.total = 0;
     slot.job = item;
     updateRow(item);
-    slot.w.postMessage({ type: 'job', id: item.id, file: item.file, preset: item.preset });
+    slot.w.postMessage({ type: 'job', id: item.id, file: item.kind === 'pdf' ? item.file : item.pdf, preset: item.preset });
   }
-  const busy = pool.filter((s) => s.job).length;
+  const busy = pool.filter((s) => s.job).length + (conv.job ? 1 : 0);
   if (!busy) { done(); return; }
-  const left = items.filter((i) => i.status === 'pending' || i.status === 'running').length;
+  const left = items.filter((i) => i.status === 'pending' || i.status === 'running' || i.status === 'converting').length;
   setStatus(`${items.length - left}/${items.length}개 끝남 · 한 번에 ${busy}개씩 처리 중`);
   refresh();
 }
@@ -289,11 +357,13 @@ async function start() {
   }
   const preset = selectedPreset();
   for (const it of targets) {
+    // 이미 PDF로 바꿔 둔 것(it.pdf)은 다시 바꾸지 않고 압축만 다시
     it.status = 'pending'; it.preset = preset; it.out = null; it.outSize = 0; it.error = ''; it.warn = false;
     updateRow(it);
   }
   running = true;
-  if (!warmed) setStatus('압축 엔진 불러오는 중… (처음 한 번만 약 15MB)');
+  if (targets.some((i) => i.kind === 'hwp' && !i.pdf)) setStatus('한글 문서를 PDF로 바꾸는 중… (처음 한 번은 한글 엔진·글꼴을 받느라 시간이 걸려요)');
+  else if (!warmed) setStatus('압축 엔진 불러오는 중… (처음 한 번만 약 15MB)');
   await keepAwake(true);
   schedule();
 }
@@ -303,6 +373,8 @@ function stop() {
     try { slot.w.terminate(); } catch { /* */ }
     if (slot.job) { slot.job.status = 'pending'; updateRow(slot.job); }
   }
+  if (conv.w) { try { conv.w.terminate(); } catch { /* */ } conv.w = null; }
+  if (conv.job) { conv.job.status = 'pending'; updateRow(conv.job); conv.job = null; }
   pool = []; warmed = false; running = false;
   keepAwake(false);
   setStatus('중지했어요. 다시 누르면 남은 파일부터 이어서 압축해요.');
@@ -336,7 +408,7 @@ stopBtn.addEventListener('click', stop);
 clearBtn.addEventListener('click', () => { items = []; list.textContent = ''; setStatus(''); refresh(); });
 
 // ---------- 받기 / ZIP / 공유 ----------
-const resultBlob = (item) => (item.status === 'done' ? item.out : item.file);
+const resultBlob = (item) => (item.status === 'done' ? item.out : (item.pdf || item.file));
 
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -390,7 +462,7 @@ function makeZip(entries) {
 
 zipBtn.addEventListener('click', () => {
   const fin = items.filter((i) => i.status === 'done' || i.status === 'kept');
-  const entries = fin.map((it) => ({ name: outName(it), blob: resultBlob(it), size: it.status === 'done' ? it.outSize : it.size, crc: it.crc }));
+  const entries = fin.map((it) => ({ name: outName(it), blob: resultBlob(it), size: resultBlob(it).size, crc: it.crc }));
   const total = entries.reduce((s, e) => s + e.size, 0);
   if (total >= 0xFFFFFFFF - 1e6) { setStatus('합쳐서 4GB가 넘어서 ZIP으로는 못 묶어요. 파일별로 “받기”를 눌러 주세요.', true); return; }
   const d = new Date();
